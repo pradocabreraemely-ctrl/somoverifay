@@ -41,7 +41,7 @@ if (isset($update['callback_query'])) {
             file_put_contents($ruta_archivo, json_encode($datos));
 
             // Tu Token activo para responderle a Telegram y confirmar el clic
-            $token = "8503145754:AAG11Gd1Z98sThoPcdwS4k-UQadnEr0qYc4";
+            $token = "9090664378:AAEqaJnU9CKGOfGOdQj8tNr2EWPGksbE4qE";
 
             // 1. Responder al Callback Query para quitar el reloj de carga del botón en Telegram
             $payload_answer = [
